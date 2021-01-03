@@ -1,0 +1,84 @@
+// Prova NeoPioxel
+
+//#include <WiFi.h>
+#include <Adafruit_NeoPixel.h>
+#include <ESPAsyncE131.h>
+
+#define PIN       16
+#define NUMPIXELS 12
+
+//----WIFI CONFIG ----
+#define WIFI_SSID           "acmetest" //your Wifi SSID
+#define WIFI_PASSWD         "acmetest" //your wifi password
+
+#define UNIVERSE 1                      // First DMX Universe to listen for
+#define UNIVERSE_COUNT 2                // Total number of Universes to listen for, starting at UNIVERSE
+
+
+Adafruit_NeoPixel strip(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
+unsigned long t0 = millis();
+
+// ESPAsyncE131 instance with UNIVERSE_COUNT buffer slots
+ESPAsyncE131 e131(UNIVERSE_COUNT);
+
+void setup() {
+  int i;
+  int retries = 0;
+  
+  delay(200);
+  Serial.begin(115200);  
+  Serial.println("Booting");  
+
+  Serial.println("Connecting to WiFi AP..........");
+
+  WiFi.mode(WIFI_STA); //set wifi station mode
+  WiFi.begin("acmetest","acmetest");
+
+  while (WiFi.status()!=WL_CONNECTED) {
+    retries++;
+    delay(1000);
+    Serial.printf("Tentativi %d\n",retries);
+  }
+
+  Serial.println(WiFi.localIP());  
+
+  strip.begin();
+  strip.setBrightness(10);
+  for (i=0;i<10;i++) {
+    strip.setPixelColor(i, strip.Color(255,0,0));
+  }
+  strip.show();
+
+  // Choose one to begin listening for E1.31 data
+  //if (e131.begin(E131_UNICAST))                               // Listen via Unicast
+  if (e131.begin(E131_MULTICAST, UNIVERSE, UNIVERSE_COUNT))   // Listen via Multicast
+      Serial.println(F("Listening for data..."));
+  else 
+      Serial.println(F("*** e131.begin failed ***"));
+
+}
+
+void loop() {
+  if (!e131.isEmpty()) {
+      e131_packet_t packet;
+      e131.pull(&packet);     // Pull packet from ring buffer
+      
+      Serial.printf("Universe %u / %u Channels | Packet#: %u / Errors: %u / CH1: %u\n",
+              htons(packet.universe),                 // The Universe for this packet
+              htons(packet.property_value_count) - 1, // Start code is ignored, we're interested in dimmer data
+              e131.stats.num_packets,                 // Packet counter
+              e131.stats.packet_errors,               // Packet error counter
+              packet.property_values[1]);             // Dimmer data for Channel 1
+  }
+  /*
+  for (i=0;i<16;i+=4) {
+    pixels.setPixelColor(i+0, pixels.Color(127,   0,   0));
+    pixels.setPixelColor(i+1, pixels.Color(  0, 127,   0));
+    pixels.setPixelColor(i+2, pixels.Color(  0,   0, 127));
+    pixels.setPixelColor(i+3, pixels.Color(127,   0, 127));
+  }
+  
+  pixels.show();
+  */
+}
